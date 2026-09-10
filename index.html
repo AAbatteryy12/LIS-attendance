@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LSHS RFID Attendance</title>
+<style>
+:root{--blue:#123b6d;--gold:#d6a83d;--bg:#f4f7fb;--card:#fff;--text:#172033;--muted:#6b7280;--ok:#198754;--danger:#c0392b}
+*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;background:var(--bg);color:var(--text)}
+header{background:linear-gradient(135deg,var(--blue),#0b2748);color:#fff;padding:18px 22px;display:flex;align-items:center;justify-content:space-between;gap:15px;position:sticky;top:0;z-index:5}
+header h1{font-size:20px;margin:0}header small{opacity:.8}
+nav{display:flex;gap:7px;flex-wrap:wrap;background:#fff;padding:10px 14px;border-bottom:1px solid #ddd;position:sticky;top:72px;z-index:4}
+nav button{border:0;background:#eef2f7;color:var(--blue);padding:11px 14px;border-radius:9px;font-weight:700;cursor:pointer}
+nav button.active,nav button:hover{background:var(--blue);color:#fff}
+main{max-width:1200px;margin:auto;padding:20px}.page{display:none}.page.active{display:block}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px}.card{background:var(--card);padding:20px;border-radius:14px;box-shadow:0 3px 15px #0000000d;border:1px solid #e5e7eb}.card .num{font-size:34px;font-weight:800;color:var(--blue)}.label{color:var(--muted);font-weight:600}
+.panel{background:#fff;padding:20px;border-radius:14px;box-shadow:0 3px 15px #0000000d;margin-bottom:18px}h2{margin-top:0;color:var(--blue)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}label{font-weight:700;font-size:14px}input,select{width:100%;padding:12px;margin-top:6px;border:1px solid #ccd3dd;border-radius:8px;font-size:15px}
+.btn{border:0;border-radius:9px;padding:12px 16px;font-weight:700;cursor:pointer}.primary{background:var(--blue);color:#fff}.gold{background:var(--gold);color:#182233}.danger{background:#fbe9e7;color:var(--danger)}.success{background:#e7f6ed;color:var(--ok)}
+.scanbox{text-align:center;padding:30px;border:2px dashed #b9c5d5;border-radius:15px;background:#f9fbfd}.scanbox .icon{font-size:55px}.scan-status{font-weight:800;margin:10px 0}
+.student{display:none;margin-top:20px;align-items:center;gap:20px;padding:18px;border-radius:14px;background:#f6fbf8;border:1px solid #bfe2ca}.student img{width:110px;height:110px;object-fit:cover;border-radius:12px;background:#fff;border:1px solid #ddd}.student h3{margin:0 0 8px}.pill{display:inline-block;padding:5px 9px;border-radius:20px;background:#eaf0f8;color:var(--blue);font-weight:700}
+table{width:100%;border-collapse:collapse}th,td{padding:11px 9px;border-bottom:1px solid #e7e9ed;text-align:left;font-size:14px}th{background:#f3f6fa;color:var(--blue)}.tablewrap{overflow:auto}
+.empty{text-align:center;color:var(--muted);padding:25px}.hint{font-size:13px;color:var(--muted);line-height:1.5}
+#toast{position:fixed;right:18px;bottom:18px;background:#182233;color:white;padding:13px 16px;border-radius:9px;display:none;z-index:20}
+@media(max-width:650px){header{padding:14px}header h1{font-size:17px}nav{top:61px}main{padding:12px}.student{flex-direction:column;text-align:center}}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>LSHS RFID Attendance</h1><small>Looc Science High School</small></div>
+  <div id="clock"></div>
+</header>
+
+<nav>
+<button class="active" onclick="showPage('dashboard',this)">Dashboard</button>
+<button onclick="showPage('encode',this)">Encode RFID</button>
+<button onclick="showPage('scan',this)">Attendance Scan</button>
+<button onclick="showPage('records',this)">Attendance Records</button>
+</nav>
+
+<main>
+<section id="dashboard" class="page active">
+  <div class="panel"><h2>Attendance Dashboard</h2><p class="hint">Today's attendance summary.</p></div>
+  <div class="cards">
+    <div class="card"><div class="num" id="totalStudents">0</div><div class="label">Registered Students</div></div>
+    <div class="card"><div class="num" id="presentCount">0</div><div class="label">Present Today</div></div>
+    <div class="card"><div class="num" id="absentCount">0</div><div class="label">Not Yet Scanned</div></div>
+    <div class="card"><div class="num" id="attendanceRate">0%</div><div class="label">Attendance Rate</div></div>
+  </div>
+  <div class="panel" style="margin-top:18px"><h2>Quick Statistics</h2>
+    <div class="grid">
+      <div><b>Male Present:</b> <span id="malePresent">0</span></div>
+      <div><b>Female Present:</b> <span id="femalePresent">0</span></div>
+      <div><b>Last Scan:</b> <span id="lastScan">None</span></div>
+    </div>
+  </div>
+</section>
+
+<section id="encode" class="page">
+<div class="panel">
+<h2>Encode New RFID / NFC</h2>
+<div class="scanbox">
+<div class="icon">📱</div>
+<div class="scan-status" id="encodeStatus">READY — TAP THE BUTTON, THEN TAP YOUR NFC CARD</div>
+<p class="hint">Use the phone's built-in NFC. Web NFC requires a supported Android browser and an HTTPS website.</p>
+<button class="btn primary" id="detectBtn" onclick="detectCardForEncoding()">📡 TAP / DETECT RFID</button>
+</div>
+
+<div id="rfidDetectedBox" style="display:none;margin-top:18px">
+<div class="panel" style="margin:0;border:2px solid #198754;background:#f3fbf6">
+<h3 style="margin-top:0;color:#198754">✅ RFID / NFC DETECTED</h3>
+<div class="grid">
+<div><label>Card UID / Serial Number</label><input id="uid" readonly></div>
+<div><label>NFC Type</label><input id="nfcType" readonly></div>
+</div>
+<p class="hint">The card is detected. Student data can now be entered.</p>
+</div>
+</div>
+
+<div id="encodeForm" style="display:none;margin-top:18px">
+<div class="panel" style="margin:0">
+<h3 style="margin-top:0;color:var(--blue)">Student Data to Encode</h3>
+<div class="grid">
+<div><label>Student ID</label><input id="sid" placeholder="e.g. 2026-0001"></div>
+<div><label>Full Name</label><input id="sname" placeholder="Juan Dela Cruz"></div>
+<div><label>Section</label><input id="section" placeholder="11 - Newton"></div>
+<div><label>Sex</label><select id="sex"><option>Male</option><option>Female</option></select></div>
+<div><label>Photo URL (optional)</label><input id="photo" placeholder="https://.../student.jpg"></div>
+</div>
+<div style="margin-top:15px">
+<button class="btn gold" onclick="encodeCardData()">💾 ENCODE DATA TO CARD</button>
+<button class="btn danger" onclick="resetEncoding()" style="margin-left:6px">Cancel</button>
+</div>
+<p class="hint" style="margin-top:12px">The UID is normally read-only. Student information is written as NDEF text to a compatible writable NFC tag.</p>
+</div>
+</div>
+</div>
+</section>
+
+<section id="scan" class="page">
+  <div class="panel">
+    <h2>Attendance Scan</h2>
+    <div class="scanbox">
+      <div class="icon">📶</div>
+      <div class="scan-status" id="scanStatus">Ready to scan</div>
+      <p class="hint">Tap an RFID/NFC card on the back of your Android phone.</p>
+      <button class="btn primary" onclick="readNFC('attendance')">Start NFC Scan</button>
+      <div style="margin:15px auto 0;max-width:360px">
+        <input id="manualUid" placeholder="Or enter RFID UID manually">
+        <button class="btn gold" style="margin-top:8px" onclick="processScan(document.getElementById('manualUid').value)">Process UID</button>
+      </div>
+    </div>
+    <div class="student" id="studentCard">
+      <img id="studentPhoto" src="" alt="Student">
+      <div><h3 id="studentName"></h3><div id="studentSection"></div><div style="margin-top:8px"><span class="pill" id="studentSex"></span> <span class="pill success">PRESENT</span></div><div class="hint" id="scanTime" style="margin-top:8px"></div></div>
+    </div>
+  </div>
+</section>
+
+<section id="records" class="page">
+  <div class="panel"><h2>Attendance Data / Log</h2>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:15px">
+      <input id="search" oninput="renderRecords()" placeholder="Search name, ID, section or UID" style="max-width:360px">
+      <button class="btn success" onclick="exportCSV()">⬇ Export to Excel</button>
+      <button class="btn danger" onclick="clearRecords()">Clear Attendance Logs</button>
+    </div>
+    <div class="tablewrap"><table><thead><tr><th>Date</th><th>Time</th><th>Student ID</th><th>Name</th><th>Section</th><th>RFID UID</th><th>Status</th></tr></thead><tbody id="recordBody"></tbody></table></div>
+  </div>
+</section>
+</main>
+<div id="toast"></div>
+
+<script>
+const KEY='lshs_rfid_students_v1', LOG='lshs_attendance_logs_v1';
+const demoPhoto='data:image/svg+xml;charset=UTF-8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300"><rect width="100%" height="100%" fill="white"/><text x="50%" y="52%" text-anchor="middle" font-family="Arial" font-size="80" fill="#123b6d">👤</text></svg>');
+
+function students(){return JSON.parse(localStorage.getItem(KEY)||'[]')}
+function logs(){return JSON.parse(localStorage.getItem(LOG)||'[]')}
+function saveStudents(a){localStorage.setItem(KEY,JSON.stringify(a))}
+function saveLogs(a){localStorage.setItem(LOG,JSON.stringify(a))}
+function today(){return new Date().toLocaleDateString('en-CA')}
+function showPage(id,btn){document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));document.getElementById(id).classList.add('active');document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));btn.classList.add('active');if(id==='dashboard')updateDashboard();if(id==='records')renderRecords()}
+function toast(t){let x=document.getElementById('toast');x.textContent=t;x.style.display='block';setTimeout(()=>x.style.display='none',2500)}
+function saveStudent(){
+  let s={id:document.getElementById('sid').value.trim(),name:document.getElementById('sname').value.trim(),section:document.getElementById('section').value.trim(),sex:document.getElementById('sex').value,photo:document.getElementById('photo').value.trim()||demoPhoto,uid:document.getElementById('uid').value.trim()};
+  if(!s.id||!s.name||!s.section||!s.uid){toast('Please complete Student ID, Name, Section and RFID UID.');return}
+  let a=students();let i=a.findIndex(x=>x.uid.toLowerCase()===s.uid.toLowerCase()||x.id===s.id);if(i>=0)a[i]=s;else a.push(s);saveStudents(a);toast('Student RFID data saved.');document.querySelectorAll('#encode input').forEach(x=>x.value='');updateDashboard()
+}
+async function readNFC(mode){
+if(!window.isSecureContext){toast('Web NFC requires HTTPS.');return;}
+if(!('NDEFReader' in window)){toast('Web NFC is not supported by this Android browser.');return;}
+try{
+const ndef=new NDEFReader();
+await ndef.scan();
+document.getElementById('scanStatus').textContent='📡 NFC ACTIVE — TAP THE STUDENT CARD ON THE BACK OF THE PHONE';
+ndef.onreadingerror=()=>{document.getElementById('scanStatus').textContent='❌ NFC CARD COULD NOT BE READ';};
+ndef.onreading=event=>{
+const uid=(event.serialNumber||'').trim();
+if(uid){processScan(uid);return;}
+for(const r of (event.message?.records||[])){
+try{
+if(r.recordType==='text'){
+const text=new TextDecoder(r.encoding||'utf-8').decode(r.data);
+const m=text.match(/UID:\s*([^\n]+)/i);
+if(m){processScan(m[1].trim());return;}
+}
+}catch(err){}
+}
+document.getElementById('scanStatus').textContent='⚠️ CARD DETECTED — NO UID PROVIDED BY BROWSER';
+};
+}catch(e){
+if(e.name==='NotAllowedError')toast('NFC permission denied. Tap Start NFC Scan again and allow NFC access.');
+else toast('NFC error: '+e.message);
+}
+}
+
+async function detectCardForEncoding(){
+if(!window.isSecureContext){setEncodeStatus('❌ HTTPS IS REQUIRED FOR WEB NFC.',false);toast('Open the HTTPS version of this website.');return;}
+if(!('NDEFReader' in window)){setEncodeStatus('❌ WEB NFC IS NOT SUPPORTED BY THIS BROWSER.',false);toast('Use a compatible Android browser with Web NFC.');return;}
+try{
+const ndef=new NDEFReader();
+await ndef.scan();
+setEncodeStatus('📡 NFC ACTIVE — NOW TAP THE CARD ON THE BACK OF THE PHONE.',true);
+document.getElementById('detectBtn').disabled=true;
+ndef.onreadingerror=()=>{
+setEncodeStatus('❌ CARD DETECTED BUT COULD NOT BE READ.',false);
+document.getElementById('detectBtn').disabled=false;
+};
+ndef.onreading=event=>{
+const uid=(event.serialNumber||'').trim();
+document.getElementById('uid').value=uid||'UID NOT PROVIDED BY BROWSER';
+document.getElementById('nfcType').value=event.message?.records?.length?'NDEF NFC TAG':'NFC TAG DETECTED';
+document.getElementById('rfidDetectedBox').style.display='block';
+document.getElementById('encodeForm').style.display='block';
+document.getElementById('detectBtn').disabled=false;
+setEncodeStatus('✅ RFID / NFC DETECTED',true);
+toast('RFID/NFC detected. Enter student data.');
+};
+}catch(e){
+document.getElementById('detectBtn').disabled=false;
+if(e.name==='NotAllowedError'){setEncodeStatus('❌ NFC PERMISSION DENIED — ALLOW NFC AND TRY AGAIN.',false);toast('NFC permission denied.');}
+else toast('NFC error: '+e.message);
+}
+}
+function setEncodeStatus(text,ok){
+const el=document.getElementById('encodeStatus');el.textContent=text;el.style.color=ok?'#198754':'#c0392b';
+}
+async function encodeCardData(){
+const uid=document.getElementById('uid').value.trim();
+const sid=document.getElementById('sid').value.trim();
+const name=document.getElementById('sname').value.trim();
+const section=document.getElementById('section').value.trim();
+const sex=document.getElementById('sex').value;
+const photo=document.getElementById('photo').value.trim()||demoPhoto;
+if(!uid||uid==='UID NOT PROVIDED BY BROWSER'||!sid||!name||!section){toast('Complete RFID detection and student information first.');return;}
+try{
+const ndef=new NDEFReader();
+const data='LSHS ATTENDANCE\nStudent ID: '+sid+'\nName: '+name+'\nSection: '+section+'\nSex: '+sex+'\nUID: '+uid;
+await ndef.write({records:[{recordType:'text',data:data}]});
+const student={id:sid,name:name,section:section,sex:sex,photo:photo,uid:uid};
+const a=students(),i=a.findIndex(x=>String(x.uid).toLowerCase()===uid.toLowerCase()||x.id===sid);
+if(i>=0)a[i]=student;else a.push(student);
+saveStudents(a);setEncodeStatus('✅ DATA ENCODED SUCCESSFULLY',true);toast('Student data written to the NFC card.');updateDashboard();
+}catch(e){toast(e.name==='NotAllowedError'?'NFC write permission was denied.':'Could not write to card: '+e.message);}
+}
+function resetEncoding(){
+['uid','nfcType','sid','sname','section','photo'].forEach(id=>{const x=document.getElementById(id);if(x)x.value='';});
+document.getElementById('rfidDetectedBox').style.display='none';
+document.getElementById('encodeForm').style.display='none';
+document.getElementById('detectBtn').disabled=false;
+setEncodeStatus('READY — TAP THE BUTTON, THEN TAP YOUR RFID/NFC CARD',true);
+}
+
+function processScan(uid){
+  uid=(uid||'').trim();if(!uid){toast('Enter or scan an RFID UID.');return}
+  let s=students().find(x=>x.uid.toLowerCase()===uid.toLowerCase());
+  if(!s){document.getElementById('scanStatus').textContent='RFID not registered';toast('RFID UID not found. Encode the student first.');return}
+  let now=new Date(), date=now.toLocaleDateString('en-CA'), time=now.toLocaleTimeString();
+  let l=logs(), already=l.some(x=>x.uid.toLowerCase()===uid.toLowerCase()&&x.date===date);
+  if(!already)l.unshift({date,time,id:s.id,name:s.name,section:s.section,uid:s.uid,status:'Present'});saveLogs(l);
+  document.getElementById('scanStatus').textContent=already?'Already scanned today':'Attendance recorded';
+  document.getElementById('studentPhoto').src=s.photo||demoPhoto;document.getElementById('studentName').textContent=s.name;
+  document.getElementById('studentSection').textContent='Section: '+s.section;document.getElementById('studentSex').textContent=s.sex;
+  document.getElementById('scanTime').textContent='Scanned: '+date+' '+time;
+  document.getElementById('studentCard').style.display='flex';document.getElementById('lastScan').textContent=s.name+' — '+time;updateDashboard();renderRecords();
+}
+function updateDashboard(){
+  let ss=students(), ll=logs().filter(x=>x.date===today()), ids=new Set(ll.map(x=>x.id));
+  document.getElementById('totalStudents').textContent=ss.length;document.getElementById('presentCount').textContent=ids.size;
+  document.getElementById('absentCount').textContent=Math.max(0,ss.length-ids.size);
+  document.getElementById('attendanceRate').textContent=ss.length?Math.round(ids.size/ss.length*100)+'%':'0%';
+  document.getElementById('malePresent').textContent=ll.filter(x=>ss.find(s=>s.id===x.id)?.sex==='Male').length;
+  document.getElementById('femalePresent').textContent=ll.filter(x=>ss.find(s=>s.id===x.id)?.sex==='Female').length;
+}
+function renderRecords(){
+  let q=(document.getElementById('search').value||'').toLowerCase(), body=document.getElementById('recordBody');
+  let a=logs().filter(x=>Object.values(x).join(' ').toLowerCase().includes(q));
+  body.innerHTML=a.length?a.map(x=>`<tr><td>${x.date}</td><td>${x.time}</td><td>${esc(x.id)}</td><td>${esc(x.name)}</td><td>${esc(x.section)}</td><td>${esc(x.uid)}</td><td><span class="pill success">${x.status}</span></td></tr>`).join(''):'<tr><td colspan="7" class="empty">No attendance records.</td></tr>';
+}
+function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
+function exportCSV(){
+  let a=logs();if(!a.length){toast('No attendance records to export.');return}
+  let rows=[['Date','Time','Student ID','Name','Section','RFID UID','Status'],...a.map(x=>[x.date,x.time,x.id,x.name,x.section,x.uid,x.status])];
+  let csv='\ufeff'+rows.map(r=>r.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(',')).join('\r\n');
+  let blob=new Blob([csv],{type:'text/csv;charset=utf-8;'}), url=URL.createObjectURL(blob), aEl=document.createElement('a');aEl.href=url;aEl.download='LSHS_Attendance_'+today()+'.csv';aEl.click();URL.revokeObjectURL(url);
+}
+function clearRecords(){if(confirm('Clear all attendance logs?')){saveLogs([]);renderRecords();updateDashboard();toast('Attendance logs cleared.')}}
+setInterval(()=>document.getElementById('clock').textContent=new Date().toLocaleString(),1000);
+updateDashboard();renderRecords();
+</script>
+</body>
+</html>
